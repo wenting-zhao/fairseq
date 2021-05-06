@@ -112,7 +112,8 @@ def spacy_tokenizer():
     if getattr(spacy_tokenizer, "_tokenizer", None) is None:
         try:
             nlp = spacy_nlp()
-            spacy_tokenizer._tokenizer = nlp.Defaults.create_tokenizer(nlp)
+            #spacy_tokenizer._tokenizer = nlp.Defaults.create_tokenizer(nlp)
+            spacy_tokenizer._tokenizer = nlp.tokenizer
         except ImportError:
             raise ImportError("Please install spacy with: pip install spacy")
     return spacy_tokenizer._tokenizer
