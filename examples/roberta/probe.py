@@ -25,6 +25,7 @@ class Probe(nn.Module):
             )
         self.mixing = nn.Parameter(torch.rand(L+1))
         self.scalar = nn.Parameter(torch.rand(1))
+        self.best_weights = None
 
     def forward(self, cls_embs):
         # compute weighted sum of embeddings
@@ -44,8 +45,7 @@ def get_examples(infile, labels):
     assert len(xs) == len(ys)
     return xs, ys
 
-def train_probe(dataset, m, d):
-    model = Probe(24)
+def train_probe(dataset, model, m, d):
     model.cuda()
     optim = torch.optim.Adam(model.parameters(),lr=0.001, weight_decay=1e-6)
     crit = nn.BCEWithLogitsLoss()
@@ -75,7 +75,7 @@ def train_probe(dataset, m, d):
             xs = train_xs[start_idx:end_idx].cuda()
             ys = train_ys[start_idx:end_idx].cuda()
             optim.zero_grad()
-            outputs = model(xs)
+            outputs = model(xs[:, :model.L+1, :])
             outputs = outputs.squeeze()
             loss = crit(outputs, ys)
             tot_loss += loss.item()
@@ -97,14 +97,14 @@ def train_probe(dataset, m, d):
                 start_idx, end_idx = i,min(i+bs, len(valid_ys))
                 xs = valid_xs[start_idx:end_idx].cuda()
                 ys = valid_ys[start_idx:end_idx].cuda()
-                outputs = model(xs)
+                outputs = model(xs[:, :model.L+1, :])
                 outputs = outputs.squeeze()
                 loss = crit(outputs, ys)
                 valid_loss += loss.item()
                 all_predictions[start_idx:end_idx] = outputs.cpu().data.numpy()
-                all_predictions[all_predictions<0.5] = 0
-                all_predictions[all_predictions>=0.5] = 1
                 all_targets[start_idx:end_idx] = ys.cpu().data.numpy()
+            all_predictions[all_predictions<0.5] = 0
+            all_predictions[all_predictions>=0.5] = 1
             valid_acc = accuracy_score(all_targets, all_predictions)
             print("valid loss:", valid_loss/len(valid_batches))
             print("valid acc:", valid_acc) 
@@ -112,6 +112,7 @@ def train_probe(dataset, m, d):
                 best_valid_acc = valid_acc
                 print("found better model!")
                 torch.save(model.state_dict(), "out/{}_{}_best_checkpoint.pt".format(m, d))
+                model.best_weights = model.mixing.detach().clone()
                 test_loss = 0.
                 all_predictions = np.zeros(len(train_ys))
                 all_targets = np.zeros(len(train_ys))
@@ -119,7 +120,7 @@ def train_probe(dataset, m, d):
                     start_idx, end_idx = i,min(i+bs, len(valid_ys))
                     xs = test_xs[start_idx:end_idx].cuda()
                     ys = test_ys[start_idx:end_idx].cuda()
-                    outputs = model(xs)
+                    outputs = model(xs[:, :model.L+1, :])
                     outputs = outputs.squeeze()
                     loss = crit(outputs, ys)
                     test_loss += loss.item()
@@ -178,16 +179,21 @@ def get_clsemb(model, dataset):
         torch.save([int(xx) for xx in ys], 'out/{0}_{1}_{2}_labels.pt'.format(model, dataset, split))
 
 def main():
-    model = sys.argv[1]
+    modelname = sys.argv[1]
     dataset = sys.argv[2]
-    if not os.path.isfile('out/{0}_{1}_test_embs.pt'.format(model, dataset)):
-        get_clsemb(model, dataset)
+    if not os.path.isfile('out/{0}_{1}_test_embs.pt'.format(modelname, dataset)):
+        get_clsemb(modelname, dataset)
     data = dict()
     data['train'], data['dev'], data['test'] = dict(), dict(), dict()
     for split in ['train', 'dev', 'test']:
-        data[split]['src'] = torch.load('out/{0}_{1}_{2}_embs.pt'.format(model, dataset, split))
-        data[split]['tgt'] = torch.load('out/{0}_{1}_{2}_labels.pt'.format(model, dataset, split))
-    train_probe(data, model, dataset)
+        data[split]['src'] = torch.load('out/{0}_{1}_{2}_embs.pt'.format(modelname, dataset, split))
+        data[split]['tgt'] = torch.load('out/{0}_{1}_{2}_labels.pt'.format(modelname, dataset, split))
+    layer = int(sys.argv[7])
+    model = Probe(layer)
+    try:
+        train_probe(data, model, modelname, dataset)
+    except KeyboardInterrupt:
+        print("weights from probe:", list(F.softmax(model.best_weights).cpu().data.numpy()))
 
 if __name__ == '__main__':
     main()
