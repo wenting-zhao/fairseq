@@ -91,8 +91,8 @@ def train_probe(dataset, model, m, d):
         valid_loss = 0.
         model.eval()
         with torch.no_grad():
-            all_predictions = np.zeros(len(train_ys))
-            all_targets = np.zeros(len(train_ys))
+            all_predictions = np.zeros(len(valid_ys))
+            all_targets = np.zeros(len(valid_ys))
             for i in tqdm(valid_batches, mininterval=0.5,desc='(Validating)', leave=False):
                 start_idx, end_idx = i,min(i+bs, len(valid_ys))
                 xs = valid_xs[start_idx:end_idx].cuda()
@@ -114,8 +114,8 @@ def train_probe(dataset, model, m, d):
                 torch.save(model.state_dict(), "out/{}_{}_best_checkpoint.pt".format(m, d))
                 model.best_weights = model.mixing.detach().clone()
                 test_loss = 0.
-                all_predictions = np.zeros(len(train_ys))
-                all_targets = np.zeros(len(train_ys))
+                all_predictions = np.zeros(len(test_ys))
+                all_targets = np.zeros(len(test_ys))
                 for i in tqdm(test_batches, mininterval=0.5,desc='(Testing)', leave=False):
                     start_idx, end_idx = i,min(i+bs, len(valid_ys))
                     xs = test_xs[start_idx:end_idx].cuda()
