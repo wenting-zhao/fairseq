@@ -1,12 +1,12 @@
 TOTAL_NUM_UPDATES=7812
 WARMUP_UPDATES=469      # 6 percent of the number of updates
 LR=1e-05                # Peak LR for polynomial LR scheduler.
-HEAD_NAME=ruletaker_head3     # Custom name for the classification head.
-NUM_CLASSES=2           # Number of classes for the classification task.
+HEAD_NAME=d0_100     # Custom name for the classification head.
+NUM_CLASSES=3           # Number of classes for the classification task.
 MAX_SENTENCES=4         # Batch size.
-ROBERTA_PATH=./checkpoints/race/checkpoint_best.pt
+ROBERTA_PATH=./checkpoints/proofonlyd3/checkpoint_best.pt
 
-CUDA_VISIBLE_DEVICES=1,2 fairseq-train ruletaker-bin/d3 \
+CUDA_VISIBLE_DEVICES=3,4 fairseq-train proofwriter-bin/d0_100 \
     --restore-file $ROBERTA_PATH \
     --max-positions 512 \
     --batch-size $MAX_SENTENCES \
@@ -29,4 +29,4 @@ CUDA_VISIBLE_DEVICES=1,2 fairseq-train ruletaker-bin/d3 \
     --shorten-method "truncate" \
     --find-unused-parameters \
     --update-freq 4 \
-    --save-dir ./checkpoints/d3
+    --save-dir ./checkpoints/d0_100

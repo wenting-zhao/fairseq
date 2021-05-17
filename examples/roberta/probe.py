@@ -47,7 +47,8 @@ def get_examples(infile, labels):
 
 def train_probe(dataset, model, m, d):
     model.cuda()
-    optim = torch.optim.Adam(model.parameters(),lr=0.001, weight_decay=1e-6)
+    lr = float(sys.argv[8])
+    optim = torch.optim.Adam(model.parameters(),lr=lr, weight_decay=1e-6)
     crit = nn.BCEWithLogitsLoss()
     bs = 128
     train_xs = dataset['train']['src']
@@ -117,7 +118,7 @@ def train_probe(dataset, model, m, d):
                 all_predictions = np.zeros(len(test_ys))
                 all_targets = np.zeros(len(test_ys))
                 for i in tqdm(test_batches, mininterval=0.5,desc='(Testing)', leave=False):
-                    start_idx, end_idx = i,min(i+bs, len(valid_ys))
+                    start_idx, end_idx = i,min(i+bs, len(test_ys))
                     xs = test_xs[start_idx:end_idx].cuda()
                     ys = test_ys[start_idx:end_idx].cuda()
                     outputs = model(xs[:, :model.L+1, :])
@@ -188,8 +189,10 @@ def main():
     for split in ['train', 'dev', 'test']:
         data[split]['src'] = torch.load('out/{0}_{1}_{2}_embs.pt'.format(modelname, dataset, split))
         data[split]['tgt'] = torch.load('out/{0}_{1}_{2}_labels.pt'.format(modelname, dataset, split))
+        data[split]['pred'] = torch.load('out/{0}_{1}_{2}_preds.pt'.format(modelname, dataset, split))
     layer = int(sys.argv[7])
     model = Probe(layer)
+    print("model acc:", accuracy_score(data['test']['tgt'], [int(x) for x in data['test']['pred']]))
     try:
         train_probe(data, model, modelname, dataset)
     except KeyboardInterrupt:
