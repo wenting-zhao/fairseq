@@ -12,7 +12,7 @@ from sklearn.metrics import accuracy_score
 
 class Probe(nn.Module):
     # Cumulative scoring probe for CLS token
-    def __init__(self, L, D_in = 1024, H = 1024):
+    def __init__(self, L, out, D_in = 1024, H = 1024):
         # L = probe level
         super().__init__()
         assert L <= 24
@@ -21,7 +21,7 @@ class Probe(nn.Module):
         self.probe_layers = nn.Sequential(
             nn.Linear(D_in, H),
             nn.ReLU(),
-            nn.Linear(H, 1)
+            nn.Linear(H, out)
             )
         self.mixing = nn.Parameter(torch.rand(L+1))
         self.scalar = nn.Parameter(torch.rand(1))
@@ -47,16 +47,15 @@ def get_examples(infile, labels):
 
 def train_probe(dataset, model, m, d):
     model.cuda()
-    lr = float(sys.argv[8])
-    optim = torch.optim.Adam(model.parameters(),lr=lr, weight_decay=1e-6)
-    crit = nn.BCEWithLogitsLoss()
+    optim = torch.optim.Adam(model.parameters(),lr=0.001, weight_decay=1e-6)
+    crit = nn.CrossEntropyLoss()
     bs = 128
     train_xs = dataset['train']['src']
-    train_ys = torch.Tensor(dataset['train']['tgt'])
+    train_ys = torch.LongTensor(dataset['train']['tgt'])
     valid_xs = dataset['dev']['src']
-    valid_ys = torch.Tensor(dataset['dev']['tgt'])
+    valid_ys = torch.LongTensor(dataset['dev']['tgt'])
     test_xs = dataset['test']['src']
-    test_ys = torch.Tensor(dataset['test']['tgt'])
+    test_ys = torch.LongTensor(dataset['test']['tgt'])
     best_valid_acc = 0
     batches = list(range(0, len(train_ys), bs))
     valid_batches = range(0, len(valid_ys), bs)
@@ -82,10 +81,8 @@ def train_probe(dataset, model, m, d):
             tot_loss += loss.item()
             loss.backward()
             optim.step()
-            all_predictions[start_idx:end_idx] = outputs.cpu().data.numpy()
+            all_predictions[start_idx:end_idx] = torch.argmax(outputs, dim=-1).cpu().data.numpy()
             all_targets[start_idx:end_idx] = ys.cpu().data.numpy()
-        all_predictions[all_predictions<0.5] = 0
-        all_predictions[all_predictions>=0.5] = 1
         train_acc = accuracy_score(all_targets, all_predictions)
         print("train loss:", tot_loss/len(batches))
         print("train acc:", train_acc) 
@@ -102,10 +99,8 @@ def train_probe(dataset, model, m, d):
                 outputs = outputs.squeeze()
                 loss = crit(outputs, ys)
                 valid_loss += loss.item()
-                all_predictions[start_idx:end_idx] = outputs.cpu().data.numpy()
+                all_predictions[start_idx:end_idx] = torch.argmax(outputs, dim=-1).cpu().data.numpy()
                 all_targets[start_idx:end_idx] = ys.cpu().data.numpy()
-            all_predictions[all_predictions<0.5] = 0
-            all_predictions[all_predictions>=0.5] = 1
             valid_acc = accuracy_score(all_targets, all_predictions)
             print("valid loss:", valid_loss/len(valid_batches))
             print("valid acc:", valid_acc) 
@@ -125,10 +120,8 @@ def train_probe(dataset, model, m, d):
                     outputs = outputs.squeeze()
                     loss = crit(outputs, ys)
                     test_loss += loss.item()
-                    all_predictions[start_idx:end_idx] = outputs.cpu().data.numpy()
+                    all_predictions[start_idx:end_idx] = torch.argmax(outputs, dim=-1).cpu().data.numpy()
                     all_targets[start_idx:end_idx] = ys.cpu().data.numpy()
-                all_predictions[all_predictions<0.5] = 0
-                all_predictions[all_predictions>=0.5] = 1
                 test_acc = accuracy_score(all_targets, all_predictions)
                 print("test loss:", test_loss/len(test_batches))
                 print("test acc:", test_acc) 
@@ -191,7 +184,8 @@ def main():
         data[split]['tgt'] = torch.load('out/{0}_{1}_{2}_labels.pt'.format(modelname, dataset, split))
         data[split]['pred'] = torch.load('out/{0}_{1}_{2}_preds.pt'.format(modelname, dataset, split))
     layer = int(sys.argv[7])
-    model = Probe(layer)
+    out_dim = int(sys.argv[8])
+    model = Probe(layer, out_dim)
     print("model acc:", accuracy_score(data['test']['tgt'], [int(x) for x in data['test']['pred']]))
     try:
         train_probe(data, model, modelname, dataset)
