@@ -9,6 +9,7 @@ from fairseq.models.roberta import RobertaModel
 from fairseq.data.data_utils import collate_tokens
 import numpy as np
 from sklearn.metrics import accuracy_score
+from collections import defaultdict
 
 class Probe(nn.Module):
     # Cumulative scoring probe for CLS token
@@ -60,7 +61,9 @@ def train_probe(dataset, model, m, d):
     batches = list(range(0, len(train_ys), bs))
     valid_batches = range(0, len(valid_ys), bs)
     test_batches = range(0, len(test_ys), bs)
-    for i in range(50):
+    #_, hops = get_examples("rawproof/d5_depth_pred/test.label", "rawproof/d5_depth_pred/test.label")
+    #hops = [int(x) for x in hops]
+    for i in range(100):
         print("epoch", i)
         print('learning rate:', optim.param_groups[0]['lr'])
         out_len = 1
@@ -112,6 +115,8 @@ def train_probe(dataset, model, m, d):
                 test_loss = 0.
                 all_predictions = np.zeros(len(test_ys))
                 all_targets = np.zeros(len(test_ys))
+                #label_dict = defaultdict(int)
+                #label_correct_dict = defaultdict(int)
                 for i in tqdm(test_batches, mininterval=0.5,desc='(Testing)', leave=False):
                     start_idx, end_idx = i,min(i+bs, len(test_ys))
                     xs = test_xs[start_idx:end_idx].cuda()
@@ -125,6 +130,11 @@ def train_probe(dataset, model, m, d):
                 test_acc = accuracy_score(all_targets, all_predictions)
                 print("test loss:", test_loss/len(test_batches))
                 print("test acc:", test_acc) 
+                #for iii in range(len(all_predictions)):
+                #    label_dict[hops[iii]] += 1
+                #    if all_targets[iii] == all_predictions[iii]: label_correct_dict[hops[iii]] += 1
+                #for iii in range(8):
+                #    if label_dict[iii] != 0: print(iii, "acc:", label_correct_dict[iii]/label_dict[iii])
 
 
 
@@ -189,6 +199,7 @@ def main():
     print("model acc:", accuracy_score(data['test']['tgt'], [int(x) for x in data['test']['pred']]))
     try:
         train_probe(data, model, modelname, dataset)
+        print("weights from probe:", list(F.softmax(model.best_weights).cpu().data.numpy()))
     except KeyboardInterrupt:
         print("weights from probe:", list(F.softmax(model.best_weights).cpu().data.numpy()))
 
